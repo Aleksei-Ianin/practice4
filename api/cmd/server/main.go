@@ -1,97 +1,67 @@
 package main
 
 import (
-	"calculator/web/internal/client"
-	"encoding/json"
-	"html/template"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
+    "calculator/api/internal/handlers"
+    "calculator/api/internal/repository"
+    "calculator/api/internal/service"
+    "database/sql"
+    "log"
+    "net/http"
+    "os"
+    "time"
+
+    _ "github.com/lib/pq"
 )
 
-var apiClient *client.APIClient
-
 func main() {
-	apiURL := os.Getenv("API_URL")
-	if apiURL == "" {
-		apiURL = "http://localhost:8081"
-	}
-	apiClient = client.NewAPIClient(apiURL)
+    dbDSN := os.Getenv("DB_DSN")
+    if dbDSN == "" {
+        dbDSN = "postgres://calculator:calcpass@localhost:5432/calc_db?sslmode=disable"
+    }
+    var db *sql.DB
+    var err error
+    for i := 0; i < 10; i++ {
+        db, err = sql.Open("postgres", dbDSN)
+        if err == nil {
+            err = db.Ping()
+            if err == nil {
+                break
+            }
+        }
+        log.Printf("Waiting for database... (%d/10)", i+1)
+        time.Sleep(2 * time.Second)
+    }
+    if err != nil {
+        log.Fatal("Could not connect to database: ", err)
+    }
+    defer db.Close()
+    db.SetMaxOpenConns(25)
+    db.SetMaxIdleConns(5)
 
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/api/calculate", proxyCalculate)
-	http.HandleFunc("/api/calculations", proxyGetAll)
-	http.HandleFunc("/api/calculations/", proxyDelete)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+    createTableSQL := `
+    CREATE TABLE IF NOT EXISTS calculations (
+        id SERIAL PRIMARY KEY,
+        operand1 DOUBLE PRECISION NOT NULL,
+        operand2 DOUBLE PRECISION NOT NULL,
+        operation TEXT NOT NULL,
+        result DOUBLE PRECISION NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );`
+    if _, err := db.Exec(createTableSQL); err != nil {
+        log.Fatal("Migration failed: ", err)
+    }
+    log.Println("Database ready")
 
-	log.Println("Web server listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
+    repo := repository.NewPostgresCalculationRepository(db)
+    calcService := service.NewCalculationService(repo)
+    calcHandler := handlers.NewCalculationHandler(calcService)
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/index.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tmpl.Execute(w, nil); err != nil {
-		http.Error(w, "Failed to render template", http.StatusInternalServerError)
-		return
-	}
-}
+    mux := http.NewServeMux()
+    mux.HandleFunc("/api/calculate", calcHandler.Calculate)
+    mux.HandleFunc("/api/calculations", calcHandler.GetAllCalculations)
+    mux.HandleFunc("/api/calculations/", calcHandler.DeleteCalculation)
 
-func proxyCalculate(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Operand1  float64 `json:"operand1"`
-		Operand2  float64 `json:"operand2"`
-		Operation string  `json:"operation"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-	calc, err := apiClient.Calculate(req.Operand1, req.Operand2, req.Operation)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(calc); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
-}
-
-func proxyGetAll(w http.ResponseWriter, r *http.Request) {
-	calcs, err := apiClient.GetAllCalculations()
-	if err != nil {
-		http.Error(w, "API error", http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(calcs); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
-}
-
-func proxyDelete(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-	id, err := strconv.Atoi(parts[3])
-	if err != nil {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-	err = apiClient.DeleteCalculation(id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+    port := ":8080"
+    log.Printf("API server listening on %s", port)
+    log.Fatal(http.ListenAndServe(port, mux))
 }
