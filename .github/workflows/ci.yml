@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_API: ${{ github.repository }}/api
-  IMAGE_NAME_WEB: ${{ github.repository }}/web
+  IMAGE_NAME_API: ${{ github.repository | lower }}/api
+  IMAGE_NAME_WEB: ${{ github.repository | lower }}/web
 
 jobs:
   lint:
