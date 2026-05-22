@@ -8,8 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_API: ${{ lower(github.repository) }}/api
-  IMAGE_NAME_WEB: ${{ lower(github.repository) }}/web
 
 jobs:
   lint:
@@ -46,30 +44,38 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Convert repository name to lowercase
+        id: vars
+        run: |
+          echo "REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build and push API image
         uses: docker/build-push-action@v5
         with:
           context: ./api
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:latest
+          tags: ${{ env.REGISTRY }}/${{ steps.vars.outputs.REPO_LOWER }}/api:latest
       - name: Build and push Web image
         uses: docker/build-push-action@v5
         with:
           context: ./web
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
+          tags: ${{ env.REGISTRY }}/${{ steps.vars.outputs.REPO_LOWER }}/web:latest
 
   scan:
     runs-on: ubuntu-latest
     needs: build-images
     steps:
+      - name: Convert repository name to lowercase for scan
+        id: vars_scan
+        run: |
+          echo "REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Scan API image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ steps.vars_scan.outputs.REPO_LOWER }}/api:latest
           severity: HIGH,CRITICAL
       - name: Scan Web image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_WEB }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ steps.vars_scan.outputs.REPO_LOWER }}/web:latest
           severity: HIGH,CRITICAL
