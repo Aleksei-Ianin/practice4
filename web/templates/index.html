@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Calculator with history</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🧮 Web Calculator (plugins: + - * / ^)</h1>
+        <div class="calc-form">
+            <input type="number" id="op1" placeholder="Number 1">
+            <select id="operation">
+                <option value="add">+</option>
+                <option value="subtract">-</option>
+                <option value="multiply">*</option>
+                <option value="divide">/</option>
+                <option value="power">^ (power)</option>
+            </select>
+            <input type="number" id="op2" placeholder="Number 2">
+            <button id="calculateBtn">Calculate</button>
+        </div>
+        <h2>History</h2>
+        <ul id="historyList"></ul>
+    </div>
+
+    <script>
+        async function loadHistory() {
+            const response = await fetch('/api/calculations');
+            const data = await response.json();
+            const list = document.getElementById('historyList');
+            list.innerHTML = '';
+            data.forEach(calc => {
+                const li = document.createElement('li');
+                let opSymbol = calc.operation;
+                if (calc.operation === 'add') opSymbol = '+';
+                if (calc.operation === 'subtract') opSymbol = '-';
+                if (calc.operation === 'multiply') opSymbol = '*';
+                if (calc.operation === 'divide') opSymbol = '/';
+                if (calc.operation === 'power') opSymbol = '^';
+                li.innerHTML = `${calc.operand1} ${opSymbol} ${calc.operand2} = ${calc.result} 
+                                <button class="deleteBtn" data-id="${calc.id}">🗑️</button>`;
+                list.appendChild(li);
+            });
+
+            document.querySelectorAll('.deleteBtn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = btn.dataset.id;
+                    await fetch(`/api/calculations/${id}`, { method: 'DELETE' });
+                    loadHistory();
+                });
+            });
+        }
+
+        document.getElementById('calculateBtn').addEventListener('click', async () => {
+            const op1 = parseFloat(document.getElementById('op1').value);
+            const op2 = parseFloat(document.getElementById('op2').value);
+            const operation = document.getElementById('operation').value;
+            if (isNaN(op1) || isNaN(op2)) {
+                alert('Enter numbers');
+                return;
+            }
+            const response = await fetch('/api/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operand1: op1, operand2: op2, operation: operation })
+            });
+            if (response.ok) {
+                loadHistory();
+                document.getElementById('op1').value = '';
+                document.getElementById('op2').value = '';
+            } else {
+                alert('Error: ' + await response.text());
+            }
+        });
+
+        loadHistory();
+    </script>
+</body>
+</html>

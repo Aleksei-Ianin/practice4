@@ -1,0 +1,21 @@
+@startuml
+actor Пользователь
+participant "Web Service" as Web
+participant "API Service" as API
+database "PostgreSQL" as DB
+
+Пользователь -> Web: Ввод чисел и операции
+Web -> API: POST /api/calculate
+API -> API: Вычисление
+API -> DB: INSERT INTO calculations
+DB --> API: ok
+API --> Web: результат
+Web --> Пользователь: обновление через JS (fetch)
+
+Пользователь -> Web: Удаление записи (кнопка)
+Web -> API: DELETE /api/calculations/{id}
+API -> DB: DELETE
+DB --> API: ok
+API --> Web: 204 No Content
+Web --> Пользователь: список обновлён
+@enduml

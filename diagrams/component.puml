@@ -1,0 +1,12 @@
+@startuml
+!include <C4/C4_Container>
+Person(user, "Пользователь")
+System_Boundary(app, "Калькулятор") {
+    Container(web, "Web Service", "Go", "HTML, статика, клиент")
+    Container(api, "API Service", "Go", "REST API, бизнес-логика")
+    ContainerDb(db, "PostgreSQL", "БД", "Хранит историю вычислений")
+}
+Rel(user, web, "HTTP, порт 8080")
+Rel(web, api, "HTTP, порт 8080 (внутри сети)")
+Rel(api, db, "TCP, порт 5432")
+@enduml
