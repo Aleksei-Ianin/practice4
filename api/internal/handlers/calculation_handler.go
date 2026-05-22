@@ -33,8 +33,12 @@ func (h *CalculationHandler) Calculate(w http.ResponseWriter, r *http.Request) {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(calc)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(calc); err != nil {
+    	http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+    	return
+	}
 }
 
 func (h *CalculationHandler) GetAllCalculations(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +48,10 @@ func (h *CalculationHandler) GetAllCalculations(w http.ResponseWriter, r *http.R
         return
     }
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(calcs)
+	if err := json.NewEncoder(w).Encode(calcs); err != nil {
+    	http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+    	return
+	}
 }
 
 func (h *CalculationHandler) DeleteCalculation(w http.ResponseWriter, r *http.Request) {
